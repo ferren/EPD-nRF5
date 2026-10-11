@@ -26,6 +26,11 @@ The web interface supports multiple image dithering algorithms and allows you to
 
 [View Documentation](docs/develop.md).
 
+## Partial Refresh
+
+Clock mode supports flashing-free partial refresh of the time digits on SSD1619
+panels, see [docs/partial-refresh.md](docs/partial-refresh.md).
+
 ## Acknowledgments
 
 This project uses or references code from the following projects:
