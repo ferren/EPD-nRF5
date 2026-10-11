@@ -106,6 +106,79 @@ void SSD16xx_Sleep(epd_model_t* epd) {
     delay(100);
 }
 
+// SSD1619A partial refresh LUT, written to register 0x32 (70 bytes).
+//
+// Layout (SSD1619A datasheet §6.6-6.7, Figure 6-6):
+//   bytes  0..6  : LUT0 (Black pixels) source levels, one byte per group (0..6).
+//                  Each byte packs phases A,B,C,D, 2 bits each: 00=VSS 01=VSH1 10=VSL 11=VSH2.
+//   bytes  7..13 : LUT1 (White pixels)
+//   bytes 14..20 : LUT2 (Red pixels, unused: red plane is bypassed via 0x21)
+//   bytes 21..27 : LUT3 (Red, same as LUT2)
+//   bytes 28..34 : LUT4 (VCOM): 00=DCVCOM
+//   bytes 35..69 : per group n (0..6): TP[nA], TP[nB], TP[nC], TP[nD], RP[n]
+//                  TP = phase length in frames (0 = phase skipped), RP = repeat count (0 = run once)
+//
+// Waveform: single ~10-frame pulse (~200ms @ 50Hz frame rate) driving each pixel
+// toward its new color. Unchanged pixels receive a reinforcing pulse in their
+// current direction, so the update does not flash. Ghosting accumulates slowly
+// and is cleared by a periodic full refresh (see EPD_service.c).
+#define SSD16xx_LUT_PARTIAL_FRAMES 10  // pulse length in frames, tune for contrast vs speed
+static const uint8_t SSD1619_LUT_PARTIAL[70] = {
+    // LUT0 - black pixels: phase A = VSL
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // LUT1 - white pixels: phase A = VSH1
+    0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // LUT2 / LUT3 - red pixels: never driven
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // LUT4 - VCOM: DC level
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // group 0 timing: TP[0A] = pulse, TP[0B..0D] skipped, run once; groups 1..6 unused
+    SSD16xx_LUT_PARTIAL_FRAMES, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00,
+};
+
+// Init the panel for partial refresh: minimal config + register LUT + red bypass.
+static void SSD16xx_InitPartial(epd_model_t* epd) {
+    EPD_Reset(true, 10);
+
+    EPD_WriteCmd(SSD16xx_SW_RESET);
+    SSD16xx_WaitBusy(200);
+
+    EPD_Write(SSD16xx_BORDER_CTRL, 0x01);
+    EPD_Write(SSD16xx_TSENSOR_CTRL, 0x80);
+
+    // bypass RED RAM content as 0: partial refresh drives black/white only,
+    // works for both COLOR_BW and COLOR_BWR panels (red plane must stay blank)
+    EPD_Write(SSD16xx_DISP_CTRL1, 0x40, 0x00);
+
+    // load the partial waveform into the LUT register (kept until next reset)
+    EPD_WriteCmd(SSD16xx_WRITE_LUT);
+    EPD_WriteData((uint8_t*)SSD1619_LUT_PARTIAL, sizeof(SSD1619_LUT_PARTIAL));
+
+    SSD16xx_SetWindow(epd, 0, 0, epd->width, epd->height);
+}
+
+// Update only the partial window using the register LUT.
+// 0xC7 = enable clock + enable analog + DISPLAY + disable stages,
+// deliberately without the "load LUT / load temperature from OTP" bits so the
+// waveform written by SSD16xx_InitPartial() stays in effect.
+static void SSD16xx_RefreshPartial(epd_model_t* epd) {
+    EPD_DEBUG("partial refresh begin");
+
+    EPD_Write(SSD16xx_DISP_CTRL2, 0xC7);
+    EPD_WriteCmd(SSD16xx_MASTER_ACTIVATE);
+    SSD16xx_WaitBusy(UINT16_MAX);
+
+    EPD_DEBUG("partial refresh end");
+    SSD16xx_SetWindow(epd, 0, 0, epd->width, epd->height);
+}
+
 static const epd_driver_t epd_drv_ssd16xx = {
     .init = SSD16xx_Init,
     .clear = SSD16xx_Clear,
@@ -117,10 +190,25 @@ static const epd_driver_t epd_drv_ssd16xx = {
     .read_busy = SSD16xx_ReadBusy,
 };
 
+// SSD1619 variants support partial refresh (custom LUT via register 0x32).
+// SSD1677 uses a different LUT format, so partial is not attached there.
+static const epd_driver_t epd_drv_ssd1619 = {
+    .init = SSD16xx_Init,
+    .clear = SSD16xx_Clear,
+    .write_image = SSD16xx_WriteImage,
+    .write_ram = SSD16xx_WriteRam,
+    .refresh = SSD16xx_Refresh,
+    .sleep = SSD16xx_Sleep,
+    .read_temp = SSD16xx_ReadTemp,
+    .read_busy = SSD16xx_ReadBusy,
+    .init_partial = SSD16xx_InitPartial,
+    .refresh_partial = SSD16xx_RefreshPartial,
+};
+
 // SSD1619 400x300 Black/White/Red
-const epd_model_t epd_ssd1619_420_bwr = {SSD1619_420_BWR, COLOR_BWR, &epd_drv_ssd16xx, DRV_IC_SSD1619, 400, 300};
+const epd_model_t epd_ssd1619_420_bwr = {SSD1619_420_BWR, COLOR_BWR, &epd_drv_ssd1619, DRV_IC_SSD1619, 400, 300};
 // SSD1619 400x300 Black/White
-const epd_model_t epd_ssd1619_420_bw = {SSD1619_420_BW, COLOR_BW, &epd_drv_ssd16xx, DRV_IC_SSD1619, 400, 300};
+const epd_model_t epd_ssd1619_420_bw = {SSD1619_420_BW, COLOR_BW, &epd_drv_ssd1619, DRV_IC_SSD1619, 400, 300};
 // SSD1677 880x528 Black/White/Red
 const epd_model_t epd_ssd1677_750_bwr = {SSD1677_750_HD_BWR, COLOR_BWR, &epd_drv_ssd16xx, DRV_IC_SSD1677, 880, 528};
 // SSD1677 880x528 Black/White

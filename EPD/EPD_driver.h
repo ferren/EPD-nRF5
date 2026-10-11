@@ -175,6 +175,15 @@ typedef struct epd_driver {
     void (*sleep)(epd_model_t* epd);       /**< Enter sleep mode */
     int8_t (*read_temp)(epd_model_t* epd); /**< Read temperature from driver chip */
     bool (*read_busy)(epd_model_t* epd);   /**< Read busy pin level */
+    /* partial refresh support (optional, NULL if unsupported).
+     * init_partial: re-init the panel with a partial refresh waveform loaded into
+     *   the driver LUT registers, then only the region written via write_image()
+     *   is updated on refresh_partial().
+     * SSD1619A selects the LUT by the pixel's NEW color (LUT0=black, LUT1=white),
+     * so no old-frame tracking is needed on the MCU side.
+     */
+    void (*init_partial)(epd_model_t* epd);    /**< init panel for partial refresh */
+    void (*refresh_partial)(epd_model_t* epd); /**< update only the partial window */
 } epd_driver_t;
 
 #define LOW (0x0)
