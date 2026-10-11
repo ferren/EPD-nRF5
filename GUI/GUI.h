@@ -23,4 +23,14 @@ typedef struct {
 
 void DrawGUI(gui_data_t* data, buffer_callback callback, void* callback_data);
 
+// Rectangle occupied by the large time digits of the clock screen (MODE_CLOCK).
+// x/w are expanded to byte boundaries (8px) as required by e-paper addressing.
+void GUI_ClockTimeRect(gui_data_t* data, uint16_t* x, uint16_t* y, uint16_t* w, uint16_t* h);
+
+// Same as DrawGUI, but only renders and reports the given sub-rectangle.
+// Used for partial refresh of the clock time strip; only the pixels inside the
+// rect are drawn, the callback is invoked with the region coordinates.
+void DrawGUIRegion(gui_data_t* data, buffer_callback callback, void* callback_data, uint16_t x, uint16_t y,
+                   uint16_t w, uint16_t h);
+
 #endif

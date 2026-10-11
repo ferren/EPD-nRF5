@@ -346,6 +346,24 @@ static void DrawTime(Adafruit_GFX* gfx, tm_t* tm, int16_t x, int16_t y, uint16_t
     Draw7Number(gfx, tm->tm_min, x, y, cS, GFX_BLACK, GFX_WHITE, nD);
 }
 
+void GUI_ClockTimeRect(gui_data_t* data, uint16_t* x, uint16_t* y, uint16_t* w, uint16_t* h) {
+    uint16_t cS = data->height / 45;
+    uint16_t nD = 2;
+    uint16_t time_width = 2 * (nD * (11 * cS + 2) - 2 * cS) + 4 * cS;
+    uint16_t time_height = 20 * cS + 4;
+    int16_t time_x = (data->width - time_width) / 2;
+    int16_t time_y = (68 + (data->height - 68)) / 2 - time_height / 2;
+
+    // expand to byte boundaries (e-paper x addressing is byte granular)
+    uint16_t xe = (time_x + time_width - 1) | 0x0007;
+    time_x &= 0xFFF8;
+
+    *x = time_x;
+    *y = time_y;
+    *w = xe - time_x + 1;
+    *h = time_height;
+}
+
 static void DrawClock(Adafruit_GFX* gfx, tm_t* tm, struct Lunar_Date* Lunar, gui_data_t* data) {
     uint8_t padding = large_layout(data) ? 100 : 40;
     GFX_setCursor(gfx, padding, 36);
@@ -375,13 +393,9 @@ static void DrawClock(Adafruit_GFX* gfx, tm_t* tm, struct Lunar_Date* Lunar, gui
 
     GFX_drawFastHLine(gfx, padding - 10, 68, data->width - 2 * (padding - 10), GFX_BLACK);
 
-    uint16_t cS = data->height / 45;
-    uint16_t nD = 2;
-    uint16_t time_width = 2 * (nD * (11 * cS + 2) - 2 * cS) + 4 * cS;
-    uint16_t time_height = 20 * cS + 4;
-    int16_t time_x = (data->width - time_width) / 2;
-    int16_t time_y = (68 + (data->height - 68)) / 2 - time_height / 2;
-    DrawTime(gfx, tm, time_x, time_y, cS, nD);
+    uint16_t time_x, time_y, time_w, time_h;
+    GUI_ClockTimeRect(data, &time_x, &time_y, &time_w, &time_h);
+    DrawTime(gfx, tm, time_x, time_y, data->height / 45, 2);
 
     GFX_drawFastHLine(gfx, padding - 10, data->height - 68, data->width - 2 * (padding - 10), GFX_BLACK);
 
@@ -452,6 +466,48 @@ void DrawGUI(gui_data_t* data, buffer_callback callback, void* callback_data) {
         if ((data->mode == MODE_CALENDAR || data->mode == MODE_CLOCK) &&
             (tm.tm_year + YEAR0 == 2025 && tm.tm_mon + 1 == 1)) {
             DrawTimeSyncTip(&gfx, data);
+        }
+    } while (GFX_nextPage(&gfx, callback, callback_data));
+
+    GFX_end(&gfx);
+}
+
+void DrawGUIRegion(gui_data_t* data, buffer_callback callback, void* callback_data, uint16_t x, uint16_t y,
+                   uint16_t w, uint16_t h) {
+    if (data->week_start > 6) data->week_start = 0;
+
+    tm_t tm = {0};
+    struct Lunar_Date Lunar;
+
+    transformTime(data->timestamp, &tm);
+
+    Adafruit_GFX gfx;
+    int16_t ph = (__HEAP_SIZE - 512) / (data->width / 8);
+
+    if (data->color == 2)
+        GFX_begin_3c(&gfx, data->width, data->height, ph);
+    else if (data->color == 3)
+        GFX_begin_4c(&gfx, data->width, data->height, ph);
+    else
+        GFX_begin(&gfx, data->width, data->height, ph);
+
+    GFX_setWindow(&gfx, x, y, w, h);  // pages outside the window are not reported
+
+    GFX_firstPage(&gfx);
+    do {
+        GFX_fillScreen(&gfx, GFX_WHITE);
+
+        LUNAR_SolarToLunar(&Lunar, tm.tm_year + YEAR0, tm.tm_mon + 1, tm.tm_mday);
+
+        switch (data->mode) {
+            case MODE_CALENDAR:
+                DrawCalendar(&gfx, &tm, &Lunar, data);
+                break;
+            case MODE_CLOCK:
+                DrawClock(&gfx, &tm, &Lunar, data);
+                break;
+            default:
+                break;
         }
     } while (GFX_nextPage(&gfx, callback, callback_data));
 
