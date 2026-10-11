@@ -55,6 +55,13 @@ static uint32_t rle_decompress_from(const uint8_t* src, uint32_t src_len, uint32
     return dst_pos;
 }
 
+// Partial refresh policy: clock mode updates the time strip via partial refresh
+// (no flashing), a full refresh is done at day boundary (header date changes)
+// and after this many partials to clean up ghosting (~30 minutes at 1 upd/min).
+#define EPD_PARTIAL_REFRESH_MAX 30
+
+static uint16_t m_partial_updates = 0;  // partial refreshes since the last full refresh
+
 static void epd_gui_update(void* p_event_data, uint16_t event_size) {
     epd_gui_update_event_t* event = (epd_gui_update_event_t*)p_event_data;
     ble_epd_t* p_epd = event->p_epd;
@@ -68,16 +75,37 @@ static void epd_gui_update(void* p_event_data, uint16_t event_size) {
         .height = epd->height,
         .timestamp = event->timestamp,
         .week_start = p_epd->config.week_start,
-        .temperature = epd->drv->read_temp(epd),
-        .voltage = EPD_ReadVoltage(),
     };
 
     uint16_t dev_name_len = sizeof(data.ssid);
     uint32_t err_code = sd_ble_gap_device_name_get((uint8_t*)data.ssid, &dev_name_len);
     if (err_code == NRF_SUCCESS && dev_name_len > 0) data.ssid[dev_name_len] = '\0';
 
-    DrawGUI(&data, (buffer_callback)epd->drv->write_image, epd);
-    epd->drv->refresh(epd);
+    bool partial = !event->full_refresh && p_epd->config.display_mode == MODE_CLOCK &&
+                   epd->drv->init_partial && epd->drv->refresh_partial && m_partial_updates < EPD_PARTIAL_REFRESH_MAX;
+
+    if (partial) {
+        // Only the time strip is redrawn and refreshed, no flashing.
+        // Temperature/voltage live in the header outside the strip and are
+        // refreshed by full refreshes; reading temp is skipped here because the
+        // SSD16xx temp read triggers a display sequence.
+        epd->drv->init_partial(epd);
+
+        uint16_t x, y, w, h;
+        GUI_ClockTimeRect(&data, &x, &y, &w, &h);
+        DrawGUIRegion(&data, (buffer_callback)epd->drv->write_image, epd, x, y, w, h);
+
+        epd->drv->refresh_partial(epd);
+        m_partial_updates++;
+    } else {
+        data.temperature = epd->drv->read_temp(epd);
+        data.voltage = EPD_ReadVoltage();
+
+        DrawGUI(&data, (buffer_callback)epd->drv->write_image, epd);
+        epd->drv->refresh(epd);
+        m_partial_updates = 0;
+    }
+
     epd->drv->sleep(epd);
     nrf_delay_ms(200);  // for sleep
     EPD_GPIO_Uninit();
@@ -432,7 +460,9 @@ void ble_epd_on_timer(ble_epd_t* p_epd, uint32_t timestamp, bool force_update) {
     // Update calendar on 00:00:00, clock on every minute
     if (force_update || (p_epd->config.display_mode == MODE_CALENDAR && timestamp % 86400 == 0) ||
         (p_epd->config.display_mode == MODE_CLOCK && timestamp % 60 == 0)) {
-        epd_gui_update_event_t event = {p_epd, timestamp};
+        bool full_refresh =
+            force_update || timestamp % 86400 == 0;  // header (date/lunar) changes at day boundary
+        epd_gui_update_event_t event = {p_epd, timestamp, full_refresh};
         app_sched_event_put(&event, sizeof(epd_gui_update_event_t), epd_gui_update);
     }
 }
