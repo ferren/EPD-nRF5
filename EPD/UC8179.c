@@ -2,8 +2,8 @@
 #include "nrf_log.h"
 
 // =============================================================================
-// 温度分段参数定义 - 每3度一档,共11档
-// Temperature tier parameters - 11 tiers with 3°C intervals
+// 温度分段参数定义 - 4档宽温度段(原11档精简,见下方NOTE)
+// Temperature tier parameters - 4 wide tiers (reduced from 11)
 // =============================================================================
 
 // T3 and T4 must always be 0 for partial refresh!
@@ -15,66 +15,29 @@
 // 温度越低,T1/T2越大(驱动时间越长); 温度越高,T1/T2越小(驱动时间越短)
 // T1: 主驱动阶段  T2: 扩展稳定阶段
 
-// Tier 0: < 7°C (极冷/Very Cold)
+// Tier 0: < 10°C (极冷/Very Cold)
 #define T1_TIER_0  56
 #define T2_TIER_0  22
 
-// Tier 1: 7-9°C (很冷/Cold)
-#define T1_TIER_1  52
-#define T2_TIER_1  20
+// Tier 5: 10-21°C (微凉/Mild - 含20°C关键区间,解决黑→白转换不完全问题)
+#define T1_TIER_5  50
+#define T2_TIER_5  18
 
-// Tier 2: 10-12°C (冷/Chilly)
-#define T1_TIER_2  48
-#define T2_TIER_2  18
+// Tier 7: 22-30°C (偏暖/Warm)
+#define T1_TIER_7  36
+#define T2_TIER_7  12
 
-// Tier 3: 13-15°C (偏冷/Cool)
-#define T1_TIER_3  44
-#define T2_TIER_3  16
+// Tier 10: >= 31°C (很热/Extreme Hot)
+#define T1_TIER_10 16
+#define T2_TIER_10 5
 
-// Tier 4: 16-18°C (凉爽/Mild Cool)
-#define T1_TIER_4  48   // 增加驱动时间(原40)
-#define T2_TIER_4  18   // 增加驱动时间(原14)
-
-// Tier 5: 19-21°C (微凉/Mild - 关键区间,解决20°C残影问题)
-// 大幅增加驱动时间以解决黑→白转换不完全的问题
-#define T1_TIER_5  50   // 大幅增加(原36),确保黑色完全擦除
-#define T2_TIER_5  18   // 大幅增加(原12),延长稳定时间
-
-// Tier 6: 22-24°C (适中/Moderate)
-#define T1_TIER_6  42   // 增加驱动时间(原32)
-#define T2_TIER_6  14   // 增加驱动时间(原10)
-
-// Tier 7: 25-27°C (偏暖/Warm)
-#define T1_TIER_7  36   // 增加驱动时间(原28)
-#define T2_TIER_7  12   // 增加驱动时间(原8)
-
-// Tier 8: 28-30°C (暖/Hot)
-#define T1_TIER_8  30   // 增加驱动时间(原24)
-#define T2_TIER_8  10   // 增加驱动时间(原7)
-
-// Tier 9: 31-33°C (热/Very Hot)
-#define T1_TIER_9  20
-#define T2_TIER_9  6
-
-// Tier 10: >= 34°C (很热/Extreme Hot)
-#define T1_TIER_10  16
-#define T2_TIER_10  5
-
-// Temperature range enumeration - 11 tiers
-// 温度范围枚举 - 11档
-typedef enum {
-    TEMP_TIER_0,   // < 7°C   极冷
-    TEMP_TIER_1,   // 7-9°C   很冷
-    TEMP_TIER_2,   // 10-12°C 冷
-    TEMP_TIER_3,   // 13-15°C 偏冷
-    TEMP_TIER_4,   // 16-18°C 凉爽
-    TEMP_TIER_5,   // 19-21°C 微凉 (20°C关键区间)
-    TEMP_TIER_6,   // 22-24°C 适中
-    TEMP_TIER_7,   // 25-27°C 偏暖
-    TEMP_TIER_8,   // 28-30°C 暖
-    TEMP_TIER_9,   // 31-33°C 热
-    TEMP_TIER_10   // >= 34°C 很热
-} temp_range_t;
+// NOTE: 原实现为 11 档(每3°C一档)。为满足 DFU bootloader 的应用区上限
+// (0x19000-0x27000, 56KB, 见 tools/make-ota-nrf52.bat 与 Keil 工程 IROM),
+// 精简为 4 档宽温度段;每档沿用原对应区间的调校参数。
+// 如需恢复 11 档,请同步确认固件体积仍在 56KB 以内。
+// NOTE: reduced from 11 tiers (3°C each) to 4 wide tiers to fit the 56KB
+// DFU application region; per-tier tuning values are taken from the
+// original tier covering that range.
 
 // LUT tables must be 42 bytes (6 data + 36 padding zeros)
 // LUT表必须为42字节(6字节数据 + 36字节填充零)
@@ -149,19 +112,12 @@ static const uint8_t lut_LUTBD_tier##tier[42] = { \
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 \
 };
 
-// 生成11组LUT表 (Tier 0-10)
-// Generate 11 LUT table sets (Tier 0-10)
-DEFINE_LUT_SET(0)   // < 7°C   极冷
-DEFINE_LUT_SET(1)   // 7-9°C   很冷
-DEFINE_LUT_SET(2)   // 10-12°C 冷
-DEFINE_LUT_SET(3)   // 13-15°C 偏冷
-DEFINE_LUT_SET(4)   // 16-18°C 凉爽
-DEFINE_LUT_SET(5)   // 19-21°C 微凉 (20°C关键区间)
-DEFINE_LUT_SET(6)   // 22-24°C 适中
-DEFINE_LUT_SET(7)   // 25-27°C 偏暖
-DEFINE_LUT_SET(8)   // 28-30°C 暖
-DEFINE_LUT_SET(9)   // 31-33°C 热
-DEFINE_LUT_SET(10)  // >= 34°C 很热
+// 生成4组LUT表 (宽温度段 Tier 0/5/7/10)
+// Generate 4 LUT table sets (wide temperature tiers 0/5/7/10)
+DEFINE_LUT_SET(0)   // < 10°C   极冷
+DEFINE_LUT_SET(5)   // 10-21°C  微凉 (含20°C关键区间)
+DEFINE_LUT_SET(7)   // 22-30°C  偏暖
+DEFINE_LUT_SET(10)  // >= 31°C  很热
 
 // LUT table set structure for easy selection
 // LUT表集合结构体,方便根据温度选择合适的LUT
@@ -185,17 +141,11 @@ static const lut_set_t lut_tier##tier = { \
     .lutbd = lut_LUTBD_tier##tier, \
 };
 
-// 生成11组LUT集合结构体
+// 生成4组LUT集合结构体 (宽温度段)
+// Generate 4 LUT set structs (wide temperature tiers)
 DEFINE_LUT_STRUCT(0)
-DEFINE_LUT_STRUCT(1)
-DEFINE_LUT_STRUCT(2)
-DEFINE_LUT_STRUCT(3)
-DEFINE_LUT_STRUCT(4)
 DEFINE_LUT_STRUCT(5)
-DEFINE_LUT_STRUCT(6)
 DEFINE_LUT_STRUCT(7)
-DEFINE_LUT_STRUCT(8)
-DEFINE_LUT_STRUCT(9)
 DEFINE_LUT_STRUCT(10)
 
 /*
@@ -256,91 +206,21 @@ int8_t UC8179_Read_Temp(epd_model_t* epd) {
 }
 
 /**
- * @brief 根据温度确定温度范围
+ * @brief 根据温度确定温度范围(4档宽温度段)
  * @param temperature 当前温度(摄氏度)
- * @return 返回温度范围枚举值
- *
- * 功能说明:
- * 将连续的温度值映射到11个离散的温度范围,每3度一档,以便精确选择LUT参数。
+ * @return 返回对应温度范围的LUT集合
  */
-// Determine temperature range based on current temperature
-// 根据当前温度确定温度范围 (11档,每3度一档)
-static temp_range_t UC8179_Get_Temp_Range(int8_t temperature) {
-    if (temperature < 7) {
-        return TEMP_TIER_0;   // < 7°C   极冷
-    } else if (temperature < 10) {
-        return TEMP_TIER_1;   // 7-9°C   很冷
-    } else if (temperature < 13) {
-        return TEMP_TIER_2;   // 10-12°C 冷
-    } else if (temperature < 16) {
-        return TEMP_TIER_3;   // 13-15°C 偏冷
-    } else if (temperature < 19) {
-        return TEMP_TIER_4;   // 16-18°C 凉爽
-    } else if (temperature < 22) {
-        return TEMP_TIER_5;   // 19-21°C 微凉 (20°C关键区间)
-    } else if (temperature < 25) {
-        return TEMP_TIER_6;   // 22-24°C 适中
-    } else if (temperature < 28) {
-        return TEMP_TIER_7;   // 25-27°C 偏暖
-    } else if (temperature < 31) {
-        return TEMP_TIER_8;   // 28-30°C 暖
-    } else if (temperature < 34) {
-        return TEMP_TIER_9;   // 31-33°C 热
-    } else {
-        return TEMP_TIER_10;  // >= 34°C 很热
-    }
-}
-
-/**
- * @brief 根据温度选择合适的LUT集合
- * @param temperature 当前温度(摄氏度)
- * @return 返回对应温度范围的LUT集合指针
- *
- * 功能说明:
- * 根据环境温度自动选择最优的LUT参数集(11档),确保不同温度下都有良好的刷新效果。
- * - 低温时选择长脉冲LUT,补偿墨水响应慢的问题
- * - 高温时选择短脉冲LUT,加快刷新速度
- */
-// Select appropriate LUT set based on temperature (11 tiers)
-// 根据温度选择合适的LUT集合 (11档)
+// Select appropriate LUT set based on temperature (4 wide tiers)
+// 根据温度选择LUT集合 (4档宽温度段)
 static const lut_set_t* UC8179_Select_LUT(int8_t temperature) {
-    temp_range_t range = UC8179_Get_Temp_Range(temperature);
-
-    switch (range) {
-        case TEMP_TIER_0:
-            NRF_LOG_INFO("[EPD]: Using Tier0 LUT (<7°C, T1=56, T2=22) temp=%d°C\n", temperature);
-            return &lut_tier0;
-        case TEMP_TIER_1:
-            NRF_LOG_INFO("[EPD]: Using Tier1 LUT (7-9°C, T1=52, T2=20) temp=%d°C\n", temperature);
-            return &lut_tier1;
-        case TEMP_TIER_2:
-            NRF_LOG_INFO("[EPD]: Using Tier2 LUT (10-12°C, T1=48, T2=18) temp=%d°C\n", temperature);
-            return &lut_tier2;
-        case TEMP_TIER_3:
-            NRF_LOG_INFO("[EPD]: Using Tier3 LUT (13-15°C, T1=44, T2=16) temp=%d°C\n", temperature);
-            return &lut_tier3;
-        case TEMP_TIER_4:
-            NRF_LOG_INFO("[EPD]: Using Tier4 LUT (16-18°C, T1=40, T2=14) temp=%d°C\n", temperature);
-            return &lut_tier4;
-        case TEMP_TIER_5:
-            NRF_LOG_INFO("[EPD]: Using Tier5 LUT (19-21°C, T1=36, T2=12) temp=%d°C\n", temperature);
-            return &lut_tier5;
-        case TEMP_TIER_6:
-            NRF_LOG_INFO("[EPD]: Using Tier6 LUT (22-24°C, T1=32, T2=10) temp=%d°C\n", temperature);
-            return &lut_tier6;
-        case TEMP_TIER_7:
-            NRF_LOG_INFO("[EPD]: Using Tier7 LUT (25-27°C, T1=28, T2=8) temp=%d°C\n", temperature);
-            return &lut_tier7;
-        case TEMP_TIER_8:
-            NRF_LOG_INFO("[EPD]: Using Tier8 LUT (28-30°C, T1=24, T2=7) temp=%d°C\n", temperature);
-            return &lut_tier8;
-        case TEMP_TIER_9:
-            NRF_LOG_INFO("[EPD]: Using Tier9 LUT (31-33°C, T1=20, T2=6) temp=%d°C\n", temperature);
-            return &lut_tier9;
-        case TEMP_TIER_10:
-        default:
-            NRF_LOG_INFO("[EPD]: Using Tier10 LUT (>=34°C, T1=16, T2=5) temp=%d°C\n", temperature);
-            return &lut_tier10;
+    if (temperature < 10) {
+        return &lut_tier0;   // < 10°C  极冷 (T1=56, T2=22)
+    } else if (temperature < 22) {
+        return &lut_tier5;   // 10-21°C 微凉 (T1=50, T2=18, 含20°C关键调校)
+    } else if (temperature < 31) {
+        return &lut_tier7;   // 22-30°C 偏暖 (T1=36, T2=12)
+    } else {
+        return &lut_tier10;  // >= 31°C 很热 (T1=16, T2=5)
     }
 }
 

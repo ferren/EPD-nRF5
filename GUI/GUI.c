@@ -218,7 +218,7 @@ static void DrawTimeSyncTip(Adafruit_GFX* gfx, gui_data_t* data) {
  */
 static void DrawLowBatteryTip(Adafruit_GFX* gfx, gui_data_t* data) {
     char voltage[12] = {0};
-    const uint8_t* voltage_font = (data->height >= 300) ? u8g2_font_helvB18_tn : u8g2_font_helvB14_tn;
+    const uint8_t* voltage_font = u8g2_font_helvB18_tn;  // all supported panels are >=300px tall; helvB14 dropped for flash size
     const char* power_off_text = "power off";
 
     uint16_t volts = data->voltage_mv / 1000;
@@ -553,7 +553,7 @@ static void DrawMonthDays(Adafruit_GFX* gfx, int16_t x, int16_t y, tm_t* tm, str
         }
 
         // 绘制日期数字 | Draw date number
-        GFX_setFont(gfx, large ? u8g2_font_helvB18_tn : u8g2_font_helvB14_tn);
+        GFX_setFont(gfx, u8g2_font_helvB18_tn);  // helvB14 dropped: fits 56KB DFU app region
         GFX_setCursor(gfx, bx + (2 * cr - GFX_getUTF8Widthf(gfx, "%d", day)) / 2, by - (cr - GFX_getFontHeight(gfx)));
         GFX_printf(gfx, "%d", day);
 
@@ -674,8 +674,8 @@ static void DrawTime(Adafruit_GFX* gfx, tm_t* tm, int16_t x, int16_t y, uint16_t
     Draw7Number(gfx, tm->tm_hour, x, y, cS, GFX_BLACK, GFX_WHITE, nD);
     x += (nD * (11 * cS + 2) - 2 * cS) + 2 * cS;
     // 绘制冒号(两个方块) | Draw colon (two squares)
-    GFX_fillRect(gfx, x, y + 4.5 * cS + 1, 2 * cS, 2 * cS, GFX_BLACK);
-    GFX_fillRect(gfx, x, y + 13.5 * cS + 3, 2 * cS, 2 * cS, GFX_BLACK);
+    GFX_fillRect(gfx, x, y + (9 * cS) / 2 + 1, 2 * cS, 2 * cS, GFX_BLACK);  // 4.5*cS in int math, avoids pulling in double softfloat
+    GFX_fillRect(gfx, x, y + (27 * cS) / 2 + 3, 2 * cS, 2 * cS, GFX_BLACK);  // 13.5*cS in int math
     x += 4 * cS;
     // 绘制分钟 | Draw minutes
     Draw7Number(gfx, tm->tm_min, x, y, cS, GFX_BLACK, GFX_WHITE, nD);
@@ -834,7 +834,7 @@ static void DrawCalendar_Right(Adafruit_GFX* gfx, tm_t* tm, struct Lunar_Date* L
             GFX_setTextColor(gfx, weekend ? GFX_RED : GFX_BLACK, GFX_WHITE);
         }
 
-        GFX_setFont(gfx, large ? u8g2_font_helvB18_tn : u8g2_font_helvB14_tn);
+        GFX_setFont(gfx, u8g2_font_helvB18_tn);  // helvB14 dropped: fits 56KB DFU app region
         GFX_setCursor(gfx, bx + (2 * cr - GFX_getUTF8Widthf(gfx, "%d", day)) / 2, by - (cr - GFX_getFontHeight(gfx)));
         GFX_printf(gfx, "%d", day);
 
