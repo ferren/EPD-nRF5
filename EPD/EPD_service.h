@@ -47,7 +47,7 @@ void ble_epd_evt_handler(ble_evt_t const* p_ble_evt, void* p_context);
     static ble_epd_t _name; \
     NRF_SDH_BLE_OBSERVER(_name##_obs, BLE_EPD_BLE_OBSERVER_PRIO, ble_epd_evt_handler, &_name)
 
-#define APP_VERSION 0x24  // 应用程序版本号
+#define APP_VERSION 0x25  // 应用程序版本号
 
 // EPD服务的128位基础UUID (自定义服务)
 #define BLE_UUID_EPD_SVC_BASE \

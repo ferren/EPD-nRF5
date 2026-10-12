@@ -86,7 +86,7 @@
 // 宏定义: 生成LUT表数组 (避免重复代码)
 // Macro: Generate LUT table array (avoid repetitive code)
 // =============================================================================
-// NOTE: LUTKW(黑→白擦除方向)的重复次数为2: V2.3实测单段加长T1收益递减(只淡一点),
+// NOTE: LUTKW(黑→白擦除方向)的重复次数为3: V2.3加长T1收益递减; V2.4两遍仍见残影,再增一遍,
 // 两遍驱动之间粒子重新分布,擦除效果远好于一段长脉冲; 代价: 局刷时长约x2
 // NOTE: LUTKW (black->white erase) repeats twice: two passes let particles
 // redistribute between drives, far more effective than a longer single pulse.
@@ -100,7 +100,7 @@ static const uint8_t lut_LUTWW_tier##tier[42] = { \
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 \
 }; \
 static const uint8_t lut_LUTKW_tier##tier[42] = { \
-    0x58, T1_TIER_##tier, T2_TIER_##tier, T3_PARTIAL, T4_PARTIAL, 2, \
+    0x58, T1_TIER_##tier, T2_TIER_##tier, T3_PARTIAL, T4_PARTIAL, 3, \
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 \
 }; \
 static const uint8_t lut_LUTWK_tier##tier[42] = { \
