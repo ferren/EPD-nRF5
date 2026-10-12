@@ -16,20 +16,20 @@
 // T1: 主驱动阶段  T2: 扩展稳定阶段
 
 // Tier 0: < 10°C (极冷/Very Cold)
-#define T1_TIER_0  56
-#define T2_TIER_0  22
+#define T1_TIER_0  64  // 56->64: 旧数字灰影擦不干净,加长黑→白主驱动
+#define T2_TIER_0  24
 
 // Tier 5: 10-21°C (微凉/Mild - 含20°C关键区间,解决黑→白转换不完全问题)
-#define T1_TIER_5  50
-#define T2_TIER_5  18
+#define T1_TIER_5  65  // 50->65: 黑→白仍擦不净(V2.2反馈),再+30%主驱动
+#define T2_TIER_5  24
 
 // Tier 7: 22-30°C (偏暖/Warm)
-#define T1_TIER_7  36
-#define T2_TIER_7  12
+#define T1_TIER_7  55  // 36->55: 对齐20°C验证档的驱动量级
+#define T2_TIER_7  20
 
 // Tier 10: >= 31°C (很热/Extreme Hot)
-#define T1_TIER_10 16
-#define T2_TIER_10 5
+#define T1_TIER_10 22  // 16->22
+#define T2_TIER_10 8
 
 // NOTE: 原实现为 11 档(每3°C一档)。为满足 DFU bootloader 的应用区上限
 // (0x19000-0x27000, 56KB, 见 tools/make-ota-nrf52.bat 与 Keil 工程 IROM),
