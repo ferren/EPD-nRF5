@@ -27,6 +27,7 @@ typedef struct {
     int8_t temperature;   // 温度(摄氏度) | Temperature (Celsius)
     uint16_t voltage_mv;  // Voltage in millivolts (e.g., 3300 for 3.3V)
                           // 电池电压(毫伏，例如3300表示3.3V) | Battery voltage in millivolts
+    char version[8];      // 固件版本号(如"V2.2"),空串则不显示 | Firmware version string, empty = hidden
     char ssid[32];        // 蓝牙/WiFi名称 | Bluetooth/WiFi name
 } gui_data_t;
 

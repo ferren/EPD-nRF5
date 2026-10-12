@@ -1230,6 +1230,13 @@ void DrawGUI(gui_data_t* data, buffer_callback callback, void* callback_data) {
             (tm.tm_year + YEAR0 == 2025 && tm.tm_mon + 1 == 1)) {
             DrawTimeSyncTip(&gfx, data);
         }
+
+        // 固件版本号: 右下角小字(局刷区域之外,只在全刷时更新) | Version: bottom-right, outside partial areas
+        if (data->version[0] != '\0') {
+            GFX_setFont(&gfx, u8g2_font_wqy9_t_lunar);
+            GFX_setCursor(&gfx, data->width - GFX_getUTF8Width(&gfx, data->version) - 4, data->height - 4);
+            GFX_printf(&gfx, "%s", data->version);
+        }
     } while (GFX_nextPage(&gfx, callback, callback_data));  // 分页绘制 | Draw with paging
 
     GFX_end(&gfx);

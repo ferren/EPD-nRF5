@@ -440,6 +440,9 @@ static void epd_gui_update(void* p_event_data, uint16_t event_size) {
     uint32_t err_code = sd_ble_gap_device_name_get((uint8_t*)data.ssid, &dev_name_len);
     if (err_code == NRF_SUCCESS && dev_name_len > 0) data.ssid[dev_name_len] = '\0';
 
+    // 固件版本号,显示在屏幕右下角 | Firmware version shown at bottom-right
+    snprintf(data.version, sizeof(data.version), "V%d.%d", APP_VERSION >> 4, APP_VERSION & 0x0F);
+
     // DrawGUI(&data, (buffer_callback)epd->drv->write_image, epd);
     // epd->drv->refresh(epd);
 
@@ -498,8 +501,10 @@ static void epd_gui_update(void* p_event_data, uint16_t event_size) {
         static uint32_t last_full_clear = 0;
         // Get refresh interval in seconds (0 means hourly = 60 minutes)
         // 获取刷新间隔(秒),0表示每小时=60分钟
+        // Default interval: 30 min. 翻转式局刷无电荷平衡,残影随局刷次数积累,
+        // 60分钟全刷一次残影偏明显,缩短为30分钟(配置 full_refresh_minutes 可覆盖)
         uint32_t refresh_interval = (p_epd->config.full_refresh_minutes == 0 || p_epd->config.full_refresh_minutes == 0xFF)
-                                    ? 3600  // Default: hourly. 默认: 每小时
+                                    ? 1800  // Default: every 30 min (was 3600). 默认: 每30分钟
                                     : (uint32_t)p_epd->config.full_refresh_minutes * 60;
         // Force full refresh if mode was just switched, first time, or at interval boundary.
         // 如果模式刚切换、首次或到达间隔边界,则强制全刷
