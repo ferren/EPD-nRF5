@@ -104,7 +104,7 @@ static const uint8_t lut_LUTWW_tier##tier[42] = { \
 static const uint8_t lut_LUTKW_tier##tier[42] = { \
     /* V2.6 振荡式擦除: 0x64 = T1:VSH驱动 -> T2:VSL回振 -> T3:VSH再驱动 (T4跳过),x2遍
        单方向脉冲(0x58,1~3遍)实测仍有残影; 回振让未过界粒子重新分布后被二次驱动 */ \
-    0x64, T1_TIER_##tier, 12, T1_TIER_##tier + 15, 0, 2, \
+    0x64, T1_TIER_##tier, 12, T1_TIER_##tier + 15, 0, 3, \
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 \
 }; \
 static const uint8_t lut_LUTWK_tier##tier[42] = { \

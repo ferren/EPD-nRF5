@@ -171,45 +171,6 @@ static bool GetFestival(uint16_t year, uint8_t mon, uint8_t day, uint8_t week, s
 }
 
 /**
- * @brief 绘制时间同步提示框
- *        Draw time synchronization reminder box
- *
- * @param gfx  图形上下文指针 | Pointer to graphics context
- * @param data GUI数据指针 | Pointer to GUI data
- *
- * 用途：当系统时间未同步时(如2025年1月)，在屏幕中央显示提示框，
- *       引导用户访问网页进行时间同步
- * Purpose: When system time is not synced (e.g., Jan 2025), display a reminder box
- *          in screen center to guide users to web page for time synchronization
- */
-static void DrawTimeSyncTip(Adafruit_GFX* gfx, gui_data_t* data) {
-    const char* title = "SYNC TIME!";
-    const char* url = "https://ycd12.github.io/EPD-nRF5_DYC/";
-
-    GFX_setFont(gfx, u8g2_font_wqy9_t_lunar);
-
-    // 计算提示框尺寸和位置 | Calculate box size and position
-    int16_t fh = GFX_getFontHeight(gfx);
-    int16_t box_w = GFX_getUTF8Width(gfx, url) + 20;  // URL宽度+边距 | URL width + padding
-    int16_t box_h = fh * 2 + 20;                       // 两行文字+边距 | 2 lines + padding
-    int16_t box_x = (data->width - box_w) / 2;         // 水平居中 | Horizontally centered
-    int16_t box_y = data->height / 2 - box_h / 2;      // 垂直居中 | Vertically centered
-
-    // 绘制白色背景框 | Draw white background box
-    GFX_fillRect(gfx, box_x, box_y, box_w, box_h, GFX_WHITE);
-    // 绘制圆角边框 | Draw rounded border
-    GFX_drawRoundRect(gfx, box_x, box_y, box_w, box_h, 5, GFX_BLACK);
-    // 绘制红色标题 | Draw red title
-    GFX_setTextColor(gfx, GFX_RED, GFX_WHITE);
-    GFX_setCursor(gfx, box_x + (box_w - GFX_getUTF8Width(gfx, title)) / 2, box_y + 5 + fh);
-    GFX_printf(gfx, title);
-    // 绘制黑色URL | Draw black URL
-    GFX_setTextColor(gfx, GFX_BLACK, GFX_WHITE);
-    GFX_setCursor(gfx, box_x + 10, box_y + box_h - GFX_getFontAscent(gfx));
-    GFX_printf(gfx, url);
-}
-
-/**
  * @brief 绘制低电量提示页
  *        Draw low battery warning page
  *
@@ -1226,11 +1187,6 @@ void DrawGUI(gui_data_t* data, buffer_callback callback, void* callback_data) {
                 break;
         }
         // 如果是2025年1月且未同步时间，显示同步提示 | Show sync reminder if Jan 2025 and time not synced
-        if ((data->mode == MODE_CALENDAR || data->mode == MODE_CLOCK) &&
-            (tm.tm_year + YEAR0 == 2025 && tm.tm_mon + 1 == 1)) {
-            DrawTimeSyncTip(&gfx, data);
-        }
-
         // 固件版本号: 右下角小字(局刷区域之外,只在全刷时更新) | Version: bottom-right, outside partial areas
         if (data->version[0] != '\0') {
             GFX_setFont(&gfx, u8g2_font_wqy9_t_lunar);

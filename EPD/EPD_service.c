@@ -80,6 +80,7 @@
 
 #include "EPD_service.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "app_scheduler.h"
@@ -209,6 +210,23 @@ static void write_image_partial_with_offset(void* ctx, uint8_t* black, uint8_t* 
         context->old_plane ? NULL : black,  // RAM1: 新帧,仅第二遍 / new frame, pass B only
         context->old_plane ? black : NULL,  // RAM2: 旧帧,仅第一遍 / previous frame, pass A only
         x + context->offset_x, y + context->offset_y, w, h);
+}
+
+// 写均匀图案到局刷双平面: RAM1=全白(0xFF), RAM2=ram2_val。
+// 用于槽位洗涤(RAM2=全黑->全区KW擦除)和洗涤后的差分基准(RAM2=全白)。
+// 借用堆内存填充,局刷时GFX页缓冲未占用,无需额外静态RAM。
+static void epd_write_uniform_region(epd_model_t* epd, uint16_t x, uint16_t y, uint16_t w,
+                                     uint16_t h, uint8_t ram2_val) {
+    uint16_t wb = (w + 7) / 8;
+    uint32_t n = (uint32_t)wb * h;
+    uint8_t* buf = malloc(n);
+    if (buf == NULL) return;
+
+    memset(buf, ram2_val, n);
+    epd->drv->write_image_partial(epd, NULL, buf, x, y, w, h);  // RAM2
+    memset(buf, 0xFF, n);
+    epd->drv->write_image_partial(epd, buf, NULL, x, y, w, h);  // RAM1=白(新帧稍后覆盖)
+    free(buf);
 }
 
 // ============================================================================
@@ -614,6 +632,17 @@ static void epd_gui_update(void* p_event_data, uint16_t event_size) {
             // 芯片逐像素比较两平面:未变化像素走零驱动LUT,消除方块底影与字色漂移。
             // 注:差分模式下无需(也不能)先清RAM——旧帧必须保留在RAM2作比较基准。
             // ================================================================
+            // C: 每10分钟(分钟十位翻转,窗口恰为完整时间区)先做槽位洗涤:
+            // 全区 RAM2=黑 + RAM1=白 -> 所有时区像素吃KW振荡擦除,
+            // 清掉高频槽位(分钟个位)的累计余灰;洗涤后旧帧=全白
+            bool do_wash = (data.mode == MODE_CLOCK_CALENDAR) && ((data.timestamp / 60) % 10 == 0);
+            if (do_wash) {
+                epd_write_uniform_region(epd, partial_x, partial_y, partial_w, partial_h, 0x00);
+                app_feed_wdt();
+                epd->drv->refresh_partial(epd, partial_x, partial_y, partial_w, partial_h);
+                app_feed_wdt();
+            }
+
             gui_data_t old_data = data;  // 结构体拷贝,仅改时间戳
             old_data.timestamp = m_last_shown_ts;
 
@@ -627,13 +656,15 @@ static void epd_gui_update(void* p_event_data, uint16_t event_size) {
                 GetTimeRefreshOrigin(&write_ctx.offset_x, &write_ctx.offset_y);
             }
 
-            NRF_LOG_INFO("[EPD]: Differential partial: pass A (old ts=%u) -> RAM2\n", m_last_shown_ts);
-            if (data.mode == MODE_CLOCK_CALENDAR) {
+            if (do_wash) {
+                // 洗涤后屏幕为全白,差分基准 RAM2=全白(无需渲染旧帧)
+                epd_write_uniform_region(epd, partial_x, partial_y, partial_w, partial_h, 0xFF);
+            } else if (data.mode == MODE_CLOCK_CALENDAR) {
                 DrawGUI_ClockOnly(&old_data, (buffer_callback)write_image_partial_with_offset, &write_ctx);
             } else {
                 DrawGUI(&old_data, (buffer_callback)write_image_partial_with_offset, &write_ctx);
             }
-            app_feed_wdt();  // 旧帧渲染写入后喂狗
+            app_feed_wdt();  // 旧帧/洗涤基准写入后喂狗
 
             write_ctx.old_plane = false;
             NRF_LOG_INFO("[EPD]: Differential partial: pass B (new ts=%u) -> RAM1\n", data.timestamp);
