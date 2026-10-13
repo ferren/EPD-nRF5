@@ -3,7 +3,7 @@ setlocal
 
 set "PATH=%PATH%;%~dp0bin"
 
-set "fw_ver=0x1E"
+set "fw_ver=0x1F"
 set "fw_hex=%~1%~2.hex"
 set "p_key=%~dp0priv.pem"
 set "bl_hex=%~dp0bootloader\bl_nrf52811_xxaa_s112.hex"

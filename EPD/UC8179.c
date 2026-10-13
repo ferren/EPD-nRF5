@@ -96,7 +96,9 @@ static const uint8_t lut_LUTC_tier##tier[42] = { \
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 \
 }; \
 static const uint8_t lut_LUTWW_tier##tier[42] = { \
-    0x20, T1_TIER_##tier, T2_TIER_##tier, T3_PARTIAL, T4_PARTIAL, 1, \
+    /* 0x00: 未变化白像素零驱动(差分式局刷必需)。旧值0x20会给白像素VSL脉冲,
+       窗口内白底反复被摇 -> 方块底影 + 与屏外白底的色差 */ \
+    0x00, T1_TIER_##tier, T2_TIER_##tier, T3_PARTIAL, T4_PARTIAL, 1, \
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 \
 }; \
 static const uint8_t lut_LUTKW_tier##tier[42] = { \
@@ -740,27 +742,27 @@ void UC8179_Write_Image(epd_model_t* epd, uint8_t* black, uint8_t* color, uint16
  * │ 适用场景       │ 全新图像/清残影 │ 频繁小区域更新  │
  * └────────────────┴─────────────────┴─────────────────┘
  *
- * 局刷数据写入方法(参考"局刷使用方法.txt" 第141-143行):
- * - RAM1(0x10/DTM1): 写入 black 数据
- * - RAM2(0x13/DTM2): 写入 ~black 数据(取反)
+ * 局刷数据写入方法(V2.7差分式):
+ * - RAM1(0x10/DTM1): 新帧 black 数据
+ * - RAM2(0x13/DTM2): 旧帧数据(由上次显示内容重新渲染),不取反
  *
- * 为什么RAM2要写入反转数据?
- * 局刷模式下,芯片通过比较RAM1和RAM2的差异来决定哪些像素需要改变:
- * - RAM1和RAM2相同的位 → 像素不变(节省刷新时间)
- * - RAM1和RAM2不同的位 → 像素需要改变
- * 写入反转数据确保所有black区域都会被正确更新。
+ * 为什么RAM2写真实旧帧而不是取反帧?
+ * 芯片通过比较RAM1和RAM2的差异决定驱动:
+ * - 相同的位 -> LUTWW/LUTKK(0x00电平,零驱动,像素不被触碰)
+ * - 不同的位 -> LUTKW/LUTWK翻转波形
+ * 旧方案(RAM2写取反帧)让窗口内所有像素每刷都被判为"翻转"而吃脉冲,
+ * 白底被反复驱动产生方块底影,未变化内容与新鲜内容产生色差。
  *
  * 注意:
  * - 局刷只支持黑白,不支持红色!
  * - 调用此函数前应已调用UC8179_Init_Partial()
  * - 写入后需要调用UC8179_Refresh_Partial()才能显示
  */
-// Write image for UC8179 partial refresh
-// UC8179局刷模式写入图像
-// Step 5: Write black data to old RAM (0x10) and ~black to new RAM (0x13)
-// 步骤5: 向旧RAM(0x10)写入black数据,向新RAM(0x13)写入~black数据
-// This function is called by DrawGUI via the buffer_callback
-// 此函数由DrawGUI通过buffer_callback调用
+// Write image for UC8179 partial refresh (differential)
+// UC8179局刷模式写入图像(差分式,V2.7起)
+// black != NULL: 新帧数据 -> RAM1(0x10,显示平面)
+// color != NULL: 旧帧数据 -> RAM2(0x13,比较平面),不取反
+// 调用方分两遍渲染: 第一遍传旧帧(经color参数),第二遍传新帧(经black参数)
 void UC8179_Write_Image_Partial(epd_model_t *epd, uint8_t *black, uint8_t *color, uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 {
     uint16_t wb = (w + 7) / 8; // width bytes, bitmaps are padded // 宽度字节数,位图已填充
@@ -773,41 +775,35 @@ void UC8179_Write_Image_Partial(epd_model_t *epd, uint8_t *black, uint8_t *color
         return;
     }
 
-    NRF_LOG_INFO("[EPD]: UC8179 write image partial at (%d,%d) size (%d,%d)\n", x, y, w, h);
-
     EPD_WriteCmd(UC81xx_PTIN); // partial in // 进入局部模式
     _setPartialRamArea(epd, x, y, w, h);  // 设置写入区域
 
-    // Step 5: Write black data to RAM1 (0x10) and ~black to RAM2 (0x13)
-    // 步骤5: 向RAM1(0x10)写入black数据,向RAM2(0x13)写入~black数据
-    // Reference: 局刷使用方法.txt line 141-143
-    // 参考: 局刷使用方法.txt 第141-143行
-    // "0x10 写black 数据, 0x13 写~black 数据"
-    // NOTE: Partial refresh only supports black/white, no red color!
-    // 注意: 局刷仅支持黑白,不支持红色!
+    // 差分式: 芯片逐像素比较RAM1(新)与RAM2(旧):
+    //   相同位 -> LUTWW/LUTKK (0x00 = 零驱动,像素不被触碰)
+    //   不同位 -> LUTKW/LUTWK 翻转波形
+    // 旧方案(RAM2写取反帧)让所有像素每刷都吃脉冲,产生方块底影与字色漂移
 
-    // Write black data to RAM1 (0x10) - directly write GFX data
-    // 向RAM1(0x10)写入黑色数据 - 直接写入GFX数据
-    NRF_LOG_DEBUG("[EPD]: Writing black data to RAM1 (0x10)\n");
-    EPD_WriteCmd(UC81xx_DTM1);  // 选择RAM1(黑色层)
-    for (uint16_t i = 0; i < h; i++)
-    {
-        for (uint16_t j = 0; j < wb; j++)
-            EPD_WriteByte(black ? black[j + i * wb] : 0xFF);  // 0xFF = white // 0xFF = 白色
+    if (color) {
+        // 旧帧 -> RAM2 (0x13,比较平面),不取反
+        EPD_WriteCmd(UC81xx_DTM2);
+        for (uint16_t i = 0; i < h; i++)
+        {
+            for (uint16_t j = 0; j < wb; j++)
+                EPD_WriteByte(color[j + i * wb]);
+        }
     }
 
-    // Write ~black data to RAM2 (0x13) - inverted GFX data
-    // 向RAM2(0x13)写入~black数据 - 反转的GFX数据
-    NRF_LOG_DEBUG("[EPD]: Writing ~black data to RAM2 (0x13)\n");
-    EPD_WriteCmd(UC81xx_DTM2);  // 选择RAM2(颜色层)
-    for (uint16_t i = 0; i < h; i++)
-    {
-        for (uint16_t j = 0; j < wb; j++)
-            EPD_WriteByte(black ? ~black[j + i * wb] : 0x00);  // inverted // 反转数据
+    if (black) {
+        // 新帧 -> RAM1 (0x10,显示平面)
+        EPD_WriteCmd(UC81xx_DTM1);
+        for (uint16_t i = 0; i < h; i++)
+        {
+            for (uint16_t j = 0; j < wb; j++)
+                EPD_WriteByte(black[j + i * wb]);
+        }
     }
 
     EPD_WriteCmd(UC81xx_PTOUT); // partial out // 退出局部模式
-    NRF_LOG_DEBUG("[EPD]: UC8179 write image partial done\n");
 }
 
 /**
