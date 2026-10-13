@@ -98,7 +98,7 @@ static const uint8_t lut_LUTC_tier##tier[42] = { \
 static const uint8_t lut_LUTWW_tier##tier[42] = { \
     /* 0x00: 未变化白像素零驱动(差分式局刷必需)。旧值0x20会给白像素VSL脉冲,
        窗口内白底反复被摇 -> 方块底影 + 与屏外白底的色差 */ \
-    0x00, T1_TIER_##tier, T2_TIER_##tier, T3_PARTIAL, T4_PARTIAL, 1, \
+    0x00, 0, 0, 0, 0, 1, \
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 \
 }; \
 static const uint8_t lut_LUTKW_tier##tier[42] = { \
@@ -112,7 +112,7 @@ static const uint8_t lut_LUTWK_tier##tier[42] = { \
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 \
 }; \
 static const uint8_t lut_LUTKK_tier##tier[42] = { \
-    0x00, T1_TIER_##tier, T2_TIER_##tier, T3_PARTIAL, T4_PARTIAL, 1, \
+    0x00, 0, 0, 0, 0, 1, \
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 \
 }; \
 static const uint8_t lut_LUTBD_tier##tier[42] = { \
